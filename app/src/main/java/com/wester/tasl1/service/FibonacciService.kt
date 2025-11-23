@@ -6,7 +6,11 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.graphics.Color
+import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CancellationException
@@ -32,6 +36,7 @@ class FibonacciService : Service() {
     private var currentProgress = 0
     private var calculationJob: Job? = null
 
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
     private fun calculateFibonacci(number: Int) {
         createNotificationChannel()
 
@@ -57,6 +62,7 @@ class FibonacciService : Service() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
     @SuppressLint("DefaultLocale")
     private suspend fun calculateFibonacciWithProgress(n: Int): String {
         if (n <= 2) return "1"
@@ -64,7 +70,7 @@ class FibonacciService : Service() {
         var a = BigInteger.ONE
         var b = BigInteger.ONE
 
-        val updateStep = max(1, n / 1000)
+        val updateStep = max(1, n / 100)
         var lastUpdateIteration = 0
 
         for (i in 3..n) {
@@ -79,12 +85,11 @@ class FibonacciService : Service() {
             if (i - lastUpdateIteration >= updateStep || i == n) {
                 lastUpdateIteration = i
 
-                val progress = (i * 1000 / n) / 10.0
-                currentProgress = progress.toInt()
+                currentProgress = (i * 100 / n)
 
                 updateNotification(
                     "Вычисление F($n)",
-                    "Прогресс: ${String.format("%.1f", progress)}%"
+                    "Прогресс: $currentProgress"
                 )
 
                 if (n > 10000) yield()
@@ -94,6 +99,7 @@ class FibonacciService : Service() {
         return b.toString()
     }
 
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when(intent?.action){
             ACTION_START -> {
@@ -117,6 +123,7 @@ class FibonacciService : Service() {
         calculationJob?.cancel()
     }
 
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
     private fun updateNotification(title: String, message: String) {
         getSystemService(
             NotificationManager::class.java
@@ -130,10 +137,10 @@ class FibonacciService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Fibonacci Live",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             setSound(null, null)
-            enableLights(false)
+            enableLights(true)
             enableVibration(false)
         }
 
@@ -141,14 +148,37 @@ class FibonacciService : Service() {
             .createNotificationChannel(channel)
     }
 
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
     private fun createNotification(title: String, message: String): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setSmallIcon(android.R.drawable.ic_notification_overlay)
-            .setProgress(100, currentProgress, false)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
+        return if (Build.VERSION.SDK_INT >= 36) {
+            val builder = Notification.Builder(this, CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setSmallIcon(android.R.drawable.ic_notification_overlay)
+                .setShortCriticalText("$currentProgress%")
+                .setColorized(false)
+                .setProgress(100, currentProgress, false)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setColor(Color.LTGRAY)
+
+            val extras = Bundle()
+            extras.putBoolean("android.extra.REQUEST_PROMOTED_ONGOING", true)
+            builder.addExtras(extras)
+
+            val notification = builder.build()
+            return notification
+
+        } else {
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setSmallIcon(android.R.drawable.ic_notification_overlay)
+                .setProgress(100, currentProgress, false)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setColor(Color.LTGRAY)
+                .build()
+        }
     }
 }
