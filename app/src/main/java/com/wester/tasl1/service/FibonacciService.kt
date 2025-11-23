@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.graphics.Color
@@ -13,16 +14,17 @@ import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.NotificationCompat
+import com.wester.tasl1.MainActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 import java.math.BigInteger
-import kotlin.coroutines.coroutineContext
 import kotlin.math.max
 
 class FibonacciService : Service() {
@@ -74,7 +76,7 @@ class FibonacciService : Service() {
         var lastUpdateIteration = 0
 
         for (i in 3..n) {
-            if (coroutineContext.isActive.not()) {
+            if (currentCoroutineContext().isActive.not()) {
                 throw CancellationException("Вычисление отменено")
             }
 
@@ -96,7 +98,17 @@ class FibonacciService : Service() {
             }
         }
 
-        return b.toString()
+        val resultString = b.toString()
+
+        val last20 = if (resultString.length > 20) {
+            resultString.takeLast(20)
+        } else {
+            resultString
+        }
+
+        val skippedCount = resultString.length - last20.length
+
+        return "Skipped: $skippedCount\n$last20"
     }
 
     @RequiresApi(Build.VERSION_CODES.BAKLAVA)
@@ -148,6 +160,19 @@ class FibonacciService : Service() {
             .createNotificationChannel(channel)
     }
 
+    private val contentPendingIntent: PendingIntent
+        get() {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            return PendingIntent.getActivity(
+                this,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
     @RequiresApi(Build.VERSION_CODES.BAKLAVA)
     private fun createNotification(title: String, message: String): Notification {
         return if (Build.VERSION.SDK_INT >= 36) {
@@ -161,6 +186,9 @@ class FibonacciService : Service() {
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setColor(Color.LTGRAY)
+
+            builder.setVisibility(Notification.VISIBILITY_PUBLIC)
+            builder.setContentIntent(contentPendingIntent)
 
             val extras = Bundle()
             extras.putBoolean("android.extra.REQUEST_PROMOTED_ONGOING", true)
@@ -178,6 +206,8 @@ class FibonacciService : Service() {
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setColor(Color.LTGRAY)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setContentIntent(contentPendingIntent)
                 .build()
         }
     }
